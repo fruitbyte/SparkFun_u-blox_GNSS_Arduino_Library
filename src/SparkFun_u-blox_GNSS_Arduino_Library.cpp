@@ -553,164 +553,6 @@ bool SFE_UBLOX_GNSS::begin(TwoWire &wirePort, uint8_t deviceAddress, uint16_t ma
   return (connected);
 }
 
-// Initialize the Serial port
-bool SFE_UBLOX_GNSS::begin(Stream &serialPort, uint16_t maxWait, bool assumeSuccess)
-{
-  commType = COMM_TYPE_SERIAL;
-  _serialPort = &serialPort; // Grab which port the user wants us to use
-  _signsOfLife = false;      // Clear the _signsOfLife flag. It will be set true if valid traffic is seen.
-
-  // New in v2.0: allocate memory for the packetCfg payload here - if required. (The user may have called setPacketCfgPayloadSize already)
-  if (packetCfgPayloadSize == 0)
-    setPacketCfgPayloadSize(MAX_PAYLOAD_SIZE);
-
-  // New in v2.0: allocate memory for the file buffer - if required. (The user should have called setFileBufferSize already)
-  createFileBuffer();
-
-  // Get rid of any stale serial data already in the processor's RX buffer
-  while (_serialPort->available())
-    _serialPort->read();
-
-  // If assumeSuccess is true, the user must really want begin to succeed. So, let's empty the module's serial transmit buffer too!
-  // Keep discarding new serial data until we see a gap of 2ms - hopefully indicating that the module's TX buffer is empty.
-  if (assumeSuccess)
-  {
-    unsigned long startTime = millis();
-    unsigned long lastActivity = startTime;
-    bool keepGoing = true;
-    while (keepGoing && (millis() < (startTime + (unsigned long)maxWait)))
-    {
-      while (_serialPort->available()) // Discard any new data
-      {
-        _serialPort->read();
-        lastActivity = millis();
-      }
-
-      if (millis() > (lastActivity + (unsigned long)2)) // Check if we have seen no new data for at least 2ms
-        keepGoing = false;
-    }
-  }
-
-  // Call isConnected up to three times - tests on the NEO-M8U show the CFG RATE poll occasionally being ignored
-  bool connected = isConnected(maxWait);
-
-  if (!connected)
-  {
-#ifndef SFE_UBLOX_REDUCED_PROG_MEM
-    if ((_printDebug == true) || (_printLimitedDebug == true)) // This is important. Print this if doing limited debugging
-    {
-      _debugSerial->println(F("begin: isConnected - second attempt"));
-    }
-#endif
-    connected = isConnected(maxWait);
-  }
-
-  if (!connected)
-  {
-#ifndef SFE_UBLOX_REDUCED_PROG_MEM
-    if ((_printDebug == true) || (_printLimitedDebug == true)) // This is important. Print this if doing limited debugging
-    {
-      _debugSerial->println(F("begin: isConnected - third attempt"));
-    }
-#endif
-    connected = isConnected(maxWait);
-  }
-
-  if ((!connected) && assumeSuccess && _signsOfLife) // Advanced users can assume success if required. Useful if the port is outputting messages at high navigation rate.
-  {
-#ifndef SFE_UBLOX_REDUCED_PROG_MEM
-    if ((_printDebug == true) || (_printLimitedDebug == true)) // This is important. Print this if doing limited debugging
-    {
-      _debugSerial->println(F("begin: third attempt failed. Assuming success..."));
-    }
-#endif
-    return (true);
-  }
-
-  return (connected);
-}
-
-// Initialize for SPI
-bool SFE_UBLOX_GNSS::begin(SPIClass &spiPort, uint8_t csPin, uint32_t spiSpeed, uint16_t maxWait, bool assumeSuccess)
-{
-  commType = COMM_TYPE_SPI;
-  _spiPort = &spiPort;
-  _csPin = csPin;
-  _spiSpeed = spiSpeed;
-  _signsOfLife = false; // Clear the _signsOfLife flag. It will be set true if valid traffic is seen.
-
-  // Initialize the chip select pin
-  pinMode(_csPin, OUTPUT);
-  digitalWrite(_csPin, HIGH);
-
-  // New in v2.0: allocate memory for the packetCfg payload here - if required. (The user may have called setPacketCfgPayloadSize already)
-  if (packetCfgPayloadSize == 0)
-    setPacketCfgPayloadSize(MAX_PAYLOAD_SIZE);
-
-  createFileBuffer();
-
-  // Create the SPI buffer
-  if (spiBuffer == NULL) // Memory has not yet been allocated - so use new
-  {
-    spiBuffer = new uint8_t[getSpiTransactionSize()];
-  }
-
-  if (spiBuffer == NULL)
-  {
-    if ((_printDebug == true) || (_printLimitedDebug == true)) // This is important. Print this if doing limited debugging
-    {
-      _debugSerial->print(F("begin (SPI): memory allocation failed for SPI Buffer!"));
-      return (false);
-    }
-  }
-  else
-  {
-    // Initialize/clear the SPI buffer - fill it with 0xFF as this is what is received from the UBLOX module if there's no data to be processed
-    for (uint8_t i = 0; i < getSpiTransactionSize(); i++)
-    {
-      spiBuffer[i] = 0xFF;
-    }
-  }
-
-  // Call isConnected up to three times - tests on the NEO-M8U show the CFG RATE poll occasionally being ignored
-  bool connected = isConnected(maxWait);
-
-  if (!connected)
-  {
-#ifndef SFE_UBLOX_REDUCED_PROG_MEM
-    if ((_printDebug == true) || (_printLimitedDebug == true)) // This is important. Print this if doing limited debugging
-    {
-      _debugSerial->println(F("begin: isConnected - second attempt"));
-    }
-#endif
-    connected = isConnected(maxWait);
-  }
-
-  if (!connected)
-  {
-#ifndef SFE_UBLOX_REDUCED_PROG_MEM
-    if ((_printDebug == true) || (_printLimitedDebug == true)) // This is important. Print this if doing limited debugging
-    {
-      _debugSerial->println(F("begin: isConnected - third attempt"));
-    }
-#endif
-    connected = isConnected(maxWait);
-  }
-
-  if ((!connected) && assumeSuccess && _signsOfLife) // Advanced users can assume success if required. Useful if the port is outputting messages at high navigation rate.
-  {
-#ifndef SFE_UBLOX_REDUCED_PROG_MEM
-    if ((_printDebug == true) || (_printLimitedDebug == true)) // This is important. Print this if doing limited debugging
-    {
-      _debugSerial->println(F("begin: third attempt failed. Assuming success..."));
-    }
-#endif
-    return (true);
-  }
-
-  return (connected);
-}
-
 // Allow the user to change I2C polling wait (the minimum interval between I2C data requests - to avoid pounding the bus)
 // i2cPollingWait defaults to 100ms and is adjusted automatically when setNavigationFrequency()
 // or setHNRNavigationRate() are called. But if the user is using callbacks, it might be advantageous
@@ -718,13 +560,6 @@ bool SFE_UBLOX_GNSS::begin(SPIClass &spiPort, uint8_t csPin, uint32_t spiSpeed, 
 void SFE_UBLOX_GNSS::setI2CpollingWait(uint8_t newPollingWait_ms)
 {
   i2cPollingWait = newPollingWait_ms;
-}
-
-// Allow the user to change SPI polling wait
-// (the minimum interval between SPI data requests when no data is available - to avoid pounding the bus)
-void SFE_UBLOX_GNSS::setSPIpollingWait(uint8_t newPollingWait_ms)
-{
-  spiPollingWait = newPollingWait_ms;
 }
 
 // Sets the global size for I2C transactions
@@ -747,26 +582,6 @@ uint8_t SFE_UBLOX_GNSS::getI2CTransactionSize(void)
 // Call this **before** begin()!
 // Note: if the buffer size is too small, incoming characters may be lost if the message sent
 // is larger than this buffer. If too big, you may run out of SRAM on constrained architectures!
-void SFE_UBLOX_GNSS::setSpiTransactionSize(uint8_t transactionSize)
-{
-  if (spiBuffer == NULL)
-  {
-    spiTransactionSize = transactionSize;
-  }
-  else
-  {
-#ifndef SFE_UBLOX_REDUCED_PROG_MEM
-    if (_printDebug == true)
-    {
-      _debugSerial->println(F("setSpiTransactionSize: you need to call setSpiTransactionSize _before_ begin!"));
-    }
-#endif
-  }
-}
-uint8_t SFE_UBLOX_GNSS::getSpiTransactionSize(void)
-{
-  return (spiTransactionSize);
-}
 
 // Sets the size of maxNMEAByteCount
 void SFE_UBLOX_GNSS::setMaxNMEAByteCount(int8_t newMax)
@@ -792,26 +607,11 @@ bool SFE_UBLOX_GNSS::isConnected(uint16_t maxWait)
   // We could simply request the config for any port but, just for giggles, let's request the config for most appropriate port
   if (commType == COMM_TYPE_I2C)
     return (getPortSettingsInternal(COM_PORT_I2C, maxWait));
-  else if (commType == COMM_TYPE_SERIAL)
-    return (getPortSettingsInternal(COM_PORT_UART1, maxWait)); // Could be UART2 - but this is just a response check
-  else                                                         // if (commType == COMM_TYPE_SPI)
-    return (getPortSettingsInternal(COM_PORT_SPI, maxWait));
 }
 
 // Enable or disable the printing of sent/response HEX values.
 // Use this in conjunction with 'Transport Logging' from the Universal Reader Assistant to see what they're doing that we're not
-void SFE_UBLOX_GNSS::enableDebugging(Stream &debugPort, bool printLimitedDebug)
-{
-  _debugSerial = &debugPort; // Grab which port the user wants us to use for debugging
-  if (printLimitedDebug == false)
-  {
-    _printDebug = true; // Should we print the commands we send? Good for debugging
-  }
-  else
-  {
-    _printLimitedDebug = true; // Should we print limited debug messages? Good for debugging high navigation rates
-  }
-}
+
 void SFE_UBLOX_GNSS::disableDebugging(void)
 {
   _printDebug = false; // Turn off extra print statements
@@ -907,11 +707,6 @@ bool SFE_UBLOX_GNSS::checkUbloxInternal(ubxPacket *incomingUBX, uint8_t requeste
 {
   if (commType == COMM_TYPE_I2C)
     return (checkUbloxI2C(incomingUBX, requestedClass, requestedID));
-  else if (commType == COMM_TYPE_SERIAL)
-    return (checkUbloxSerial(incomingUBX, requestedClass, requestedID));
-  else if (commType == COMM_TYPE_SPI)
-    return (checkUbloxSpi(incomingUBX, requestedClass, requestedID));
-  return false;
 }
 
 // Polls I2C for data, passing any new bytes to process()
@@ -1116,55 +911,6 @@ bool SFE_UBLOX_GNSS::checkUbloxI2C(ubxPacket *incomingUBX, uint8_t requestedClas
   return (true);
 
 } // end checkUbloxI2C()
-
-// Checks Serial for data, passing any new bytes to process()
-bool SFE_UBLOX_GNSS::checkUbloxSerial(ubxPacket *incomingUBX, uint8_t requestedClass, uint8_t requestedID)
-{
-  while (_serialPort->available())
-  {
-    process(_serialPort->read(), incomingUBX, requestedClass, requestedID);
-  }
-  return (true);
-
-} // end checkUbloxSerial()
-
-// Checks SPI for data, passing any new bytes to process()
-bool SFE_UBLOX_GNSS::checkUbloxSpi(ubxPacket *incomingUBX, uint8_t requestedClass, uint8_t requestedID)
-{
-  // Process the contents of the SPI buffer if not empty!
-  for (uint8_t i = 0; i < spiBufferIndex; i++)
-  {
-    process(spiBuffer[i], incomingUBX, requestedClass, requestedID);
-  }
-  spiBufferIndex = 0;
-
-  _spiPort->beginTransaction(SPISettings(_spiSpeed, MSBFIRST, SPI_MODE0));
-  digitalWrite(_csPin, LOW);
-  uint8_t byteReturned = _spiPort->transfer(0xFF);
-
-  // Note to future self: I think the 0xFF check might cause problems when attempting to process (e.g.) RAWX data
-  // which could legitimately contain 0xFF within the data stream. But the currentSentence check will certainly help!
-
-  // If we are not receiving a sentence (currentSentence == NONE) and the byteReturned is 0xFF,
-  // i.e. the module has no data for us, then delay for
-  if ((byteReturned == 0xFF) && (currentSentence == NONE))
-  {
-    digitalWrite(_csPin, HIGH);
-    _spiPort->endTransaction();
-    delay(spiPollingWait);
-    return (true);
-  }
-
-  while ((byteReturned != 0xFF) || (currentSentence != NONE))
-  {
-    process(byteReturned, incomingUBX, requestedClass, requestedID);
-    byteReturned = _spiPort->transfer(0xFF);
-  }
-  digitalWrite(_csPin, HIGH);
-  _spiPort->endTransaction();
-  return (true);
-
-} // end checkUbloxSpi()
 
 // PRIVATE: Check if we have storage allocated for an incoming "automatic" message
 bool SFE_UBLOX_GNSS::checkAutomatic(uint8_t Class, uint8_t ID)
@@ -5164,13 +4910,7 @@ bool SFE_UBLOX_GNSS::pushRawData(uint8_t *dataBytes, size_t numDataBytes, bool s
   if (numDataBytes == 0)
     return (false); // Indicate to the user that there was no data to push
 
-  if (commType == COMM_TYPE_SERIAL)
-  {
-    // Serial: write all the bytes in one go
-    size_t bytesWritten = _serialPort->write(dataBytes, numDataBytes);
-    return (bytesWritten == numDataBytes);
-  }
-  else if (commType == COMM_TYPE_I2C)
+  if (commType == COMM_TYPE_I2C)
   {
     // We can not write a single data byte to I2C as it would look like the address of a random read.
     // If numDataBytes is 1, we should probably just reject the data and return false.
@@ -5264,7 +5004,7 @@ bool SFE_UBLOX_GNSS::pushRawData(uint8_t *dataBytes, size_t numDataBytes, bool s
 // Return how many bytes were pushed successfully.
 // If skipTime is true, any UBX-MGA-INI-TIME_UTC or UBX-MGA-INI-TIME_GNSS packets found in the data will be skipped,
 // allowing the user to override with their own time data with setUTCTimeAssistance.
-size_t SFE_UBLOX_GNSS::pushAssistNowData(const String &dataBytes, size_t numDataBytes, sfe_ublox_mga_assist_ack_e mgaAck, uint16_t maxWait)
+size_t SFE_UBLOX_GNSS::pushAssistNowData(const std::string &dataBytes, size_t numDataBytes, sfe_ublox_mga_assist_ack_e mgaAck, uint16_t maxWait)
 {
   return (pushAssistNowDataInternal(0, false, (const uint8_t *)dataBytes.c_str(), numDataBytes, mgaAck, maxWait));
 }
@@ -5272,7 +5012,7 @@ size_t SFE_UBLOX_GNSS::pushAssistNowData(const uint8_t *dataBytes, size_t numDat
 {
   return (pushAssistNowDataInternal(0, false, dataBytes, numDataBytes, mgaAck, maxWait));
 }
-size_t SFE_UBLOX_GNSS::pushAssistNowData(bool skipTime, const String &dataBytes, size_t numDataBytes, sfe_ublox_mga_assist_ack_e mgaAck, uint16_t maxWait)
+size_t SFE_UBLOX_GNSS::pushAssistNowData(bool skipTime, const std::string &dataBytes, size_t numDataBytes, sfe_ublox_mga_assist_ack_e mgaAck, uint16_t maxWait)
 {
   return (pushAssistNowDataInternal(0, skipTime, (const uint8_t *)dataBytes.c_str(), numDataBytes, mgaAck, maxWait));
 }
@@ -5280,7 +5020,7 @@ size_t SFE_UBLOX_GNSS::pushAssistNowData(bool skipTime, const uint8_t *dataBytes
 {
   return (pushAssistNowDataInternal(0, skipTime, dataBytes, numDataBytes, mgaAck, maxWait));
 }
-size_t SFE_UBLOX_GNSS::pushAssistNowData(size_t offset, bool skipTime, const String &dataBytes, size_t numDataBytes, sfe_ublox_mga_assist_ack_e mgaAck, uint16_t maxWait)
+size_t SFE_UBLOX_GNSS::pushAssistNowData(size_t offset, bool skipTime, const std::string &dataBytes, size_t numDataBytes, sfe_ublox_mga_assist_ack_e mgaAck, uint16_t maxWait)
 {
   return (pushAssistNowDataInternal(offset, skipTime, (const uint8_t *)dataBytes.c_str(), numDataBytes, mgaAck, maxWait));
 }
@@ -5661,7 +5401,7 @@ bool SFE_UBLOX_GNSS::setPositionAssistanceLLH(int32_t lat, int32_t lon, int32_t 
 // The daysIntoFture parameter makes it easy to get the data for (e.g.) tomorrow based on today's date
 // Returns numDataBytes if unsuccessful
 // TO DO: enhance this so it will find the nearest data for the chosen day - instead of an exact match
-size_t SFE_UBLOX_GNSS::findMGAANOForDate(const String &dataBytes, size_t numDataBytes, uint16_t year, uint8_t month, uint8_t day, uint8_t daysIntoFuture)
+size_t SFE_UBLOX_GNSS::findMGAANOForDate(const std::string &dataBytes, size_t numDataBytes, uint16_t year, uint8_t month, uint8_t day, uint8_t daysIntoFuture)
 {
   return (findMGAANOForDateInternal((const uint8_t *)dataBytes.c_str(), numDataBytes, year, month, day, daysIntoFuture));
 }
