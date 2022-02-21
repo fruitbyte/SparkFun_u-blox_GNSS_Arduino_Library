@@ -53,14 +53,6 @@ SFE_UBLOX_GNSS::SFE_UBLOX_GNSS(void)
 
   _logNMEA.all = 0;                             // Default to passing no NMEA messages to the file buffer
   _processNMEA.all = SFE_UBLOX_FILTER_NMEA_ALL; // Default to passing all NMEA messages to processNMEA
-
-  // Support for platforms like ESP32 which do not support multiple I2C restarts
-  // If _i2cStopRestart is true, endTransmission will always use a stop. If false, a restart will be used where needed.
-#if defined(ARDUINO_ARCH_ESP32)
-  _i2cStopRestart = true; // Always use a stop
-#else
-  _i2cStopRestart = false; // Use a restart where needed
-#endif
 }
 
 // Stop all automatic message processing. Free all used RAM
