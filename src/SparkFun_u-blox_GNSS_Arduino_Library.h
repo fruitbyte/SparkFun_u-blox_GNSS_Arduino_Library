@@ -617,7 +617,8 @@ public:
   // Begin communication with the GNSS. Advanced users can assume success if required. Useful if the port is already outputting messages at high navigation rate.
   // Begin will then return true if "signs of life" have been seen: reception of _any_ valid UBX packet or _any_ valid NMEA header.
   // By default use the default I2C address, and use Wire port
-  bool begin(TwoWire &wirePort = Wire, uint8_t deviceAddress = 0x42, uint16_t maxWait = defaultMaxWait, bool assumeSuccess = false); // Returns true if module is detected
+  int i2cOpen(unsigned i2cBus = 0, unsigned gpsAddress = 0x42, unsigned i2cFlags = 0);
+  // bool begin(TwoWire &wirePort = Wire, uint8_t deviceAddress = 0x42, uint16_t maxWait = defaultMaxWait, bool assumeSuccess = false); // Returns true if module is detected
 
   void end(void); // Stop all automatic message processing. Free all used RAM
 
@@ -795,7 +796,7 @@ public:
   moduleSWVersion_t *moduleSWVersion = NULL;                         // Pointer to struct. RAM will be allocated for this if/when necessary
 
   // Support for geofences
-  bool addGeofence(int32_t latitude, int32_t longitude, uint32_t radius, byte confidence = 0, byte pinPolarity = 0, byte pin = 0, uint16_t maxWait = defaultMaxWait); // Add a new geofence
+  bool addGeofence(int32_t latitude, int32_t longitude, uint32_t radius, uint8_t confidence = 0, uint8_t pinPolarity = 0, uint8_t pin = 0, uint16_t maxWait = defaultMaxWait); // Add a new geofence
   bool clearGeofences(uint16_t maxWait = defaultMaxWait);                                                                                                             // Clears all geofences
   bool clearAntPIO(uint16_t maxWait = defaultMaxWait);                                                                                                                // Clears the antenna control pin settings to release the PIOs
   bool getGeofenceState(geofenceState &currentGeofenceState, uint16_t maxWait = defaultMaxWait);                                                                      // Returns the combined geofence state
@@ -1497,7 +1498,7 @@ private:
   bool initStorageNMEAGNGGA(); // Allocate RAM for incoming NMEA GNGGA messages and initialize it
 
   // Variables
-  TwoWire *_i2cPort;              // The generic connection to user's chosen I2C hardware
+  // TwoWire *_i2cPort;              // The generic connection to user's chosen I2C hardware
   uint8_t _csPin;     // The chip select pin
 
   uint8_t _gpsI2Caddress = 0x42; // Default 7-bit unshifted address of the ublox 6/7/8/M8/F9 series
